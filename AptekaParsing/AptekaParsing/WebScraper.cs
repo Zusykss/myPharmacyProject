@@ -79,10 +79,10 @@ namespace AptekaParsing
         {
             string str = "";
             if (!url.Contains("rozetka") && !url.Contains("eldorado"))
+            {
                 str = await HttpClientLoader(url);
-            if (str.Contains(":443"))
-                return "";
-            if (str == "" || str.Contains("ERROR HTTPCLIENT") || str.Contains("Please Wait... | Cloudflare") || str.Contains("403 Forbidden"))
+            }
+            if (str == "" || str.Contains("ERROR HTTPCLIENT") || str.Contains("Please Wait... | Cloudflare") || str.Contains("403 Forbidden")|| str.Contains(":443"))
             {
                 str = await BrowserLoader(url, 0);
             }
@@ -96,7 +96,7 @@ namespace AptekaParsing
             || str.Contains("400 Bad Request")
             || str.Contains(":443"))
             {
-                return "";
+                return str;
             }
             return str;
         }

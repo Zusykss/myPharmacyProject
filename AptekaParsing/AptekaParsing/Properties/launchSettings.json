@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "AptekaParsing": {
+      "commandName": "Project",
+      "commandLineArgs": "refreshProducts"
+    }
+  }
+}
