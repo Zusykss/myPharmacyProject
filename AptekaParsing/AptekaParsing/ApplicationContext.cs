@@ -16,10 +16,21 @@ namespace AptekaParsing
         public ApplicationContext()
         {
             Database.EnsureCreated();
+            
         }
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
-            optionsBuilder.UseNpgsql("Host=localhost;Port=5432;Database=AptekaParsing;Username=postgres;Password=admin");
+            string options;
+            if (File.Exists("psqlConnection.txt"))
+            {
+                options = File.ReadAllText("psqlConnection.txt").Trim();
+            }
+            else
+            {
+                throw new FileNotFoundException("psqlConnection.txt not found");
+            }
+            optionsBuilder.UseNpgsql(options);
+            //optionsBuilder.UseNpgsql("Host=localhost;Port=5432;Database=AptekaParsing;Username=postgres;Password=admin;");
         }
     }
 }

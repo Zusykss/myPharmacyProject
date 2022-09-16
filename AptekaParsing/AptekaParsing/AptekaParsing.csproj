@@ -19,4 +19,10 @@
     <PackageReference Include="PuppeteerSharp" Version="7.1.0" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Update="psqlConnection.txt">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
 </Project>
