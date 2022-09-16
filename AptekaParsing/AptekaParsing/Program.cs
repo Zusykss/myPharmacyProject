@@ -1,14 +1,17 @@
 ﻿// See https://aka.ms/new-console-template for more information
 using AptekaParsing;
 using AptekaParsing.Entities;
+using CsvHelper;
 using HtmlAgilityPack;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using System.Dynamic;
 using System.Text.RegularExpressions;
-
-
-
+using Microsoft.EntityFrameworkCore;
+using CsvHelper.Configuration;
+using System.Text;
+using System.Text.Json;
+using System.Net;
 
 public static class Program
 {
@@ -16,11 +19,30 @@ public static class Program
     {
         MainAsync(args).GetAwaiter().GetResult();
     }
+    private static string logMessages="";
+    private static LogWriter logger = new LogWriter("logs.txt");
+
     public static async Task MainAsync(string[] args)
     {
-        if (args.Length == 0) return;
-        foreach(var arg in args)
+        try
         {
+            if (args.Length == 0)
+            {
+                logger.LogInformation(DateTime.Now.ToLongTimeString());
+                Console.WriteLine("Start Deleting");
+                ClearProducts();
+                using (var context = new ApplicationContext())
+                {
+                    if (context.Stores.Count() <= 0) ParceAndSaveStores();
+                }
+                Console.WriteLine("Start Parsing");
+                await MainParce();
+                exportCsv();
+                logger.LogInformation(DateTime.Now.ToLongTimeString());
+                return;
+            };
+        
+            var arg = args[0];
             if (arg.Contains("clearStores"))
             {
                 ClearStores();
@@ -44,7 +66,9 @@ public static class Program
             }
             else if (arg.Contains("refreshProducts"))
             {
+                Console.WriteLine("Start Deleting");
                 ClearProducts();
+                Console.WriteLine("Start Parsing");
                 await MainParce();
             }
             else if (arg.Contains("parceStores"))
@@ -55,36 +79,85 @@ public static class Program
             {
                 await MainParce();
             }
+
+            Console.WriteLine("Completed!");
         }
-        Console.WriteLine("Completed!");
+        catch(Exception ex)
+        {
+            Console.WriteLine(ex);
+            logger.LogCritical(ex);
+        }
+    }
+    private class ProductRecord 
+    {
+        public int Id { get; set; }
+        public string? Name { get; set; }
+        public string? Producer { get; set; }
+        public string? InStores { get; set; }
+    };
+    static void exportCsv()
+    {
+        var fileName = "products";
+        
+        //if (File.Exists(fileName+".csv"))
+        //{
+        //    int i = 1;
+        //    for (; File.Exists($"{fileName}({i}).csv"); i++) ;
+        //    fileName += $"({i})";
+        //}
+        fileName += ".csv";
+        
+        using(var context = new ApplicationContext())
+        {
+            var products = context.Products.Include(p => p.ProductInStores).ToList();
+            var dataProducts = new List<ProductRecord>();
+            foreach (var product in products)
+            {
+                var dataProduct = new ProductRecord
+                {
+                    Id = product.Id,
+                    Name = product.ProductName,
+                    Producer = product.Producer,
+                    InStores = System.Text.Json.JsonSerializer.Serialize(product.ProductInStores)
+                };
+                dataProducts.Add(dataProduct);
+            }
+            if (File.Exists(fileName))
+            {
+                File.Delete(fileName);
+            }
+            var config = new CsvConfiguration(System.Globalization.CultureInfo.CurrentCulture) { Delimiter = ";", Encoding= Encoding.UTF8 };
+            using(var writer = new StreamWriter(fileName))
+                using(var csv = new CsvWriter(writer, config))
+            {
+                csv.WriteRecords(dataProducts);
+            }
+            
+        }
+
+
     }
 
     static void ClearStores()
     {
         using (var context = new ApplicationContext())
         {
-            if (context.Stores.Count() <= 0) return;
-            context.Stores.RemoveRange(context.Stores);
-            context.SaveChanges();
+            context.Database.ExecuteSqlRaw("TRUNCATE TABLE \"Stores\"");
         }
     }
     static void ClearProducts()
     {
         using (var context = new ApplicationContext())
         {
-            if (context.Products.Count() <= 0) return;
-            context.Products.RemoveRange(context.Products);
-            context.ProductInStores.RemoveRange(context.ProductInStores);
-            context.SaveChanges();
+            context.Database.ExecuteSqlRaw("TRUNCATE TABLE \"Products\" CASCADE");
+            context.Database.ExecuteSqlRaw("TRUNCATE TABLE \"ProductInStores\" CASCADE");
         }
     }
-
     async static void ParceAndSaveAll()
     {
         await ParceAndSaveStores();
         await MainParce();
     }
-
     async static Task ParceAndSaveStores()
     {
         WebScraper webScraper = new WebScraper();
@@ -144,6 +217,7 @@ public static class Program
 
     }
 
+
     async static Task MainParce()
     {
         WebScraper webScraper = new WebScraper();
@@ -172,78 +246,90 @@ public static class Program
             {
                 for (int i = 1; i < Convert.ToInt32(count);)
                 {
-
-                    var allLinksOnPage = nodesProduct.Select(node => node.Attributes["href"].Value.Replace("instruction/", "")).ToList();
-
-                    i++;
-                    str = await webScraper.GetHtml(listUrl + $"page={i}/");
-                    htmlDoc.LoadHtml(str);
-                    nodesProduct = htmlDoc.DocumentNode.SelectNodes("//a[@class='products-list__item-link-wrapper']");
-
-                    var tasks = new List<Task<Tuple<Product, Dictionary<int, string>>>>();
-                    using (var context = new ApplicationContext())
+                    try
                     {
-                        var idsInDb = context.Products.Select(p => p.Id).ToList();
+                        var allLinksOnPage = nodesProduct.Select(node => node.Attributes["href"].Value.Replace("instruction/", "")).ToList();
 
-                        allLinksOnPage = allLinksOnPage.Where(link =>
-                        {
-                            var productIdPattern = @".ua\/.+\/(\d+)\/";
-                            var productId = Convert.ToInt32(Regex.Match(link, productIdPattern).Groups[1].Value);
-                            return !idsInDb.Contains(productId);
-                        }).ToList();
-                    }
-                    if (allLinksOnPage.Count <= 0) continue;
-                    foreach (var link in allLinksOnPage)
-                        {
-                            
+                        i++;
+                        str = await webScraper.GetHtml(listUrl + $"page={i}/");
+                        htmlDoc.LoadHtml(str);
+                        nodesProduct = htmlDoc.DocumentNode.SelectNodes("//a[@class='products-list__item-link-wrapper']");
 
-                            tasks.Add(ParceProductAndStoresCoordinates(link));
-                        }
-                    
-
-                    const int tasksCount = 30;
-                    while (tasks.Count > 0)
-                    {
-                        var currentTasks = tasks.Take(tasksCount);
-                        tasks = tasks.Skip(tasksCount).ToList();
-
-                        var tasksData = await Task.WhenAll(currentTasks);
-                        var products = tasksData.Select(x => x.Item1).ToList();
-
-                        var coordinates = new Dictionary<int, string>();
-                        foreach (var dict in tasksData.Select(x => x.Item2).ToList())
-                        {
-                            foreach (var item in dict)
-                            {
-                                if (!coordinates.ContainsKey(item.Key)) coordinates[item.Key] = item.Value;
-                            }
-                        }
-
-
-
+                        var tasks = new List<Task<Tuple<Product, Dictionary<int, string>>>>();
                         using (var context = new ApplicationContext())
                         {
-                            var storesWithoutCords = context.Stores
-                                .Where(x => x.Сoordinates == null)
-                                .ToList()
-                                .Where(x => coordinates.ContainsKey(x.Id))
-                                .ToList();
-                            foreach (var store in storesWithoutCords)
+                            var idsInDb = context.Products.Select(p => p.Id).ToList();
+
+                            allLinksOnPage = allLinksOnPage.Where(link =>
                             {
-                                store.Сoordinates = coordinates[store.Id];
-                            }
-                            context.Products.AddRange(products);
-                            context.SaveChanges();
+                                var productIdPattern = @".ua\/.+\/(\d+)\/";
+                                var productId = Convert.ToInt32(Regex.Match(link, productIdPattern).Groups[1].Value);
+                                return !idsInDb.Contains(productId);
+                            }).ToList();
                         }
+                        if (allLinksOnPage.Count <= 0) continue;
+
+                        foreach (var link in allLinksOnPage)
+                        {
+                            tasks.Add(ParceProductAndStoresCoordinates(link));
+                        }
+
+
+                        const int tasksCount = 30;
+
+
+                        while (tasks.Count > 0)
+                        {
+                            var currentTasks = tasks.Take(tasksCount);
+                            tasks = tasks.Skip(tasksCount).ToList();
+
+                            var tasksData = await Task.WhenAll(currentTasks);
+
+                            if (logMessages != "")
+                            {
+                                logger.LogInformation(logMessages);
+                                logMessages = "";
+                            }
+
+                            var products = tasksData.Select(x => x.Item1).ToList();
+
+                            var coordinates = new Dictionary<int, string>();
+                            foreach (var dict in tasksData.Select(x => x.Item2).ToList())
+                            {
+                                foreach (var item in dict)
+                                {
+                                    if (!coordinates.ContainsKey(item.Key)) coordinates[item.Key] = item.Value;
+                                }
+                            }
+
+
+
+                            using (var context = new ApplicationContext())
+                            {
+                                var storesWithoutCords = context.Stores
+                                    .Where(x => x.Сoordinates == null)
+                                    .ToList()
+                                    .Where(x => coordinates.ContainsKey(x.Id))
+                                    .ToList();
+                                foreach (var store in storesWithoutCords)
+                                {
+                                    store.Сoordinates = coordinates[store.Id];
+                                }
+                                context.Products.AddRange(products);
+                                context.SaveChanges();
+                            }
+                        }
+
                     }
-
-
+                    catch (Exception ex)
+                    {
+                        logger.LogCritical(ex);
+                    }
 
                 }
             }
         }
     }
-
     async static Task<Tuple<Product, Dictionary<int, string>>> ParceProductAndStoresCoordinates(string link)
     {
         WebScraper webScraper = new WebScraper();
@@ -261,8 +347,7 @@ public static class Program
         var organizationIdListJson = Regex.Match(html, organizationIdListPattern).Groups[1].Value;
         if (organizationIdListJson == "" && organizationPointsJson == "")
         {
-            Console.WriteLine($"There isn't product {productId} in stores");
-
+            logMessages += $"There isn't product {productId} in stores\n";
             var htmlDock = new HtmlDocument();
             htmlDock.LoadHtml(html);
             productName = htmlDock.DocumentNode.SelectSingleNode("//div[@class='search-result-head__title-wrapper']/h1").InnerText.Trim();
@@ -287,15 +372,14 @@ public static class Program
 
             if (value.ordersOn == false) continue;
             var price = value.price;
+
             int countLeft = 1;
 
             var productInStore = new ProductInStore { Price = price, CountLeft = countLeft, StoreId = storeId, ProductId = productId };
             productInStores.Add(productInStore);
 
-
-
         }
-
+        
         var productDataPattern = "{\"id\":" + productId + ",\"name\":\"(.+?)\",\"producer\":\"(.+?)\"}";
 
         var productData = Regex.Match(html, productDataPattern).Groups;
@@ -306,7 +390,26 @@ public static class Program
 
         return new Tuple<Product, Dictionary<int, string>>(product, storeCoords);
     }
+    //private static async Task<string> PostAsyncJson(string uri, string data)
+    //{
+    //    byte[] dataBytes = Encoding.UTF8.GetBytes(data);
 
+    //    HttpWebRequest request = (HttpWebRequest)WebRequest.Create(uri);
+    //    request.AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate;
+    //    request.ContentLength = dataBytes.Length;
+    //    request.ContentType = "application/json";
+    //    request.Method = "POST";
+    //    request.CookieContainer = new CookieContainer();
+    //    request.CookieContainer.Add(new Cookie("SESSION", "SESSION =M2RiMjU1YTQtZWJiOS00YTRlLTk0YzItZTc0MzI0YWE3ZTE3"));
+
+
+    //    using (HttpWebResponse response = (HttpWebResponse)await request.GetResponseAsync())
+    //    using (Stream stream = response.GetResponseStream())
+    //    using (StreamReader reader = new StreamReader(stream))
+    //    {
+    //        return await reader.ReadToEndAsync();
+    //    }
+    //}
 
 }
 
