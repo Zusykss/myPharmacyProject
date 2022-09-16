@@ -33,7 +33,7 @@ public static class Program
                 ClearProducts();
                 using (var context = new ApplicationContext())
                 {
-                    if (context.Stores.Count() <= 0) ParceAndSaveStores();
+                    if (context.Stores.Count() <= 0)await ParceAndSaveStores();
                 }
                 Console.WriteLine("Start Parsing");
                 await MainParce();
