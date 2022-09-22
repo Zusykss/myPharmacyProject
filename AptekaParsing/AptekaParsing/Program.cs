@@ -202,22 +202,86 @@ public static class Program
             }
 
             Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
-            //Encoding.GetEncoding(1251)
             var config = new CsvConfiguration(System.Globalization.CultureInfo.CurrentCulture) { Delimiter = ";", Encoding = Encoding.UTF8 };
             using (var writer = new StreamWriter(
                 new FileStream(fileName, FileMode.OpenOrCreate, FileAccess.ReadWrite),
-                  Encoding.GetEncoding(1251)))
+                  Encoding.UTF8))
             using(var csv = new CsvWriter(writer, config))
             {
                 csv.WriteRecords(dataProducts);
             }
-            
+
+            Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+
+            //ConvertFileEncoding(fileName, fileName.Replace(".csv", "1252.csv"), Encoding.UTF8, Encoding.GetEncoding(1252));
+            var input = File.ReadAllText(fileName);
+            var utf8bytes = Encoding.UTF8.GetBytes(input);
+            var win1252Bytes = Encoding.Convert(
+                            Encoding.UTF8, Encoding.GetEncoding(1251), utf8bytes);
+
+
+           
+            var fileStream = new FileStream(fileName.Replace(".csv", "1251.csv"), FileMode.OpenOrCreate, FileAccess.ReadWrite);
+            using (var writer = new BinaryWriter(fileStream,Encoding.GetEncoding(1251)))
+            {
+                writer.Write(win1252Bytes);
+            }
+
+            File.Delete(fileName);
+            File.Move(fileName.Replace(".csv", "1251.csv"), fileName);
         }
 
 
     }
 
-    static void exportDb(string dbConnection, int count = -1)
+    /// <summary>
+    /// Converts a file from one encoding to another.
+    /// </summary>
+    /// <param name=”sourcePath”>the file to convert</param>
+    /// <param name=”destPath”>the destination for the converted file</param>
+    /// <param name=”sourceEncoding”>the original file encoding</param>
+    /// <param name=”destEncoding”>the encoding to which the contents should be converted</param>
+    public static void ConvertFileEncoding(String sourcePath, String destPath,
+                                           Encoding sourceEncoding, Encoding destEncoding)
+    {
+        // If the destination’s parent doesn’t exist, create it.
+        String parent = Path.GetDirectoryName(Path.GetFullPath(destPath));
+        if (!Directory.Exists(parent))
+        {
+            Directory.CreateDirectory(parent);
+        }
+        // If the source and destination encodings are the same, just copy the file.
+        if (sourceEncoding == destEncoding)
+        {
+            File.Copy(sourcePath, destPath, true);
+            return;
+        }
+        // Convert the file.
+        String tempName = null;
+        try
+        {
+            tempName = Path.GetTempFileName();
+            using (StreamReader sr = new StreamReader(sourcePath, sourceEncoding, false))
+            {
+                using (StreamWriter sw = new StreamWriter(tempName, false, destEncoding))
+                {
+                    int charsRead;
+                    char[] buffer = new char[128 * 1024];
+                    while ((charsRead = sr.ReadBlock(buffer, 0, buffer.Length)) > 0)
+                    {
+                        sw.Write(buffer, 0, charsRead);
+                    }
+                }
+            }
+            File.Delete(destPath);
+            File.Move(tempName, destPath);
+        }
+        finally
+        {
+            File.Delete(tempName);
+        }
+    }
+        static void exportDb(string dbConnection, int count = -1)
     {
         using (var context = new ApplicationContext(databasePath))
         {
