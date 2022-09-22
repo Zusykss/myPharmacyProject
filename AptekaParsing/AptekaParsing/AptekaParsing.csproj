@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
@@ -17,10 +17,15 @@
     </PackageReference>
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="6.0.6" />
     <PackageReference Include="PuppeteerSharp" Version="7.1.0" />
+    <PackageReference Include="System.Data.SqlClient" Version="4.8.3" />
+    <PackageReference Include="System.Text.Encoding.CodePages" Version="6.0.0" />
   </ItemGroup>
 
   <ItemGroup>
     <None Update="psqlConnection.txt">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Update="writePath.txt">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
   </ItemGroup>

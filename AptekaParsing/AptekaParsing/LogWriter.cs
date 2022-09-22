@@ -13,7 +13,7 @@ namespace AptekaParsing
         private string path;
         public LogWriter(string filePath)
         {
-            path = filePath;
+            path =  filePath;
         }
 
 

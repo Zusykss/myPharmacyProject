@@ -10,8 +10,7 @@ using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using CsvHelper.Configuration;
 using System.Text;
-using System.Text.Json;
-using System.Net;
+using System.Data.SqlClient;
 
 public static class Program
 {
@@ -20,29 +19,40 @@ public static class Program
         MainAsync(args).GetAwaiter().GetResult();
     }
     private static string logMessages="";
-    private static LogWriter logger = new LogWriter("logs.txt");
+    private static LogWriter logger;
+    private static string databasePath="";
 
     public static async Task MainAsync(string[] args)
     {
         try
         {
-            if (args.Length == 0)
+
+            if (args.Length < 2)
             {
-                logger.LogInformation(DateTime.Now.ToLongTimeString());
+                args = new string[2] { args[0], "" };
+            }
+            databasePath = args[1];
+            var arg = args[0];
+
+            logger = new LogWriter(args[1] + "\\" + "logs.txt");
+            logger.LogInformation(DateTime.Now.ToLongTimeString());
+            if (arg.Contains("mainParce"))
+            {
+
                 Console.WriteLine("Start Deleting");
                 ClearProducts();
-                using (var context = new ApplicationContext())
+                using (var context = new ApplicationContext(databasePath))
                 {
-                    if (context.Stores.Count() <= 0)await ParceAndSaveStores();
+                    if (context.Stores.Count() <= 0) await ParceAndSaveStores();
                 }
                 Console.WriteLine("Start Parsing");
                 await MainParce();
-                exportCsv();
-                logger.LogInformation(DateTime.Now.ToLongTimeString());
+                exportCsv(args[1]);
+
                 return;
             };
-        
-            var arg = args[0];
+
+
             if (arg.Contains("clearStores"))
             {
                 ClearStores();
@@ -79,8 +89,24 @@ public static class Program
             {
                 await MainParce();
             }
-
+            else if (arg.Contains("fastExport"))
+            {
+                exportCsv(args[1]);
+            }
+            else if (arg.Contains("testExport"))
+            {
+                exportCsv(args[1], 10);
+            }
+            else if (arg.Contains("dbExport")) {
+                exportDb(args[1], -1);
+            }
+            else if (arg.Contains("dbTestExport"))
+            {
+                exportDb(args[1], 2);
+            }
+            logger.LogInformation(DateTime.Now.ToLongTimeString());
             Console.WriteLine("Completed!");
+
         }
         catch(Exception ex)
         {
@@ -88,47 +114,100 @@ public static class Program
             logger.LogCritical(ex);
         }
     }
-    private class ProductRecord 
+    private class ProductRecordCSV 
     {
-        public int Id { get; set; }
-        public string? Name { get; set; }
+        [CsvHelper.Configuration.Attributes.Index(0)]
+        public string? StoreId { get; set; }
+        [CsvHelper.Configuration.Attributes.Index(1)]
+        public string? Addres{ get; set; }
+        [CsvHelper.Configuration.Attributes.Index(2)]
+        public string? City { get; set; }
+        [CsvHelper.Configuration.Attributes.Index(3)]
+        public string? ProductId { get; set; }
+        [CsvHelper.Configuration.Attributes.Index(4)]
+        public string? ProductName { get; set; }
+        [CsvHelper.Configuration.Attributes.Index(5)]
         public string? Producer { get; set; }
-        public string? InStores { get; set; }
+        [CsvHelper.Configuration.Attributes.Index(6)]
+        public string? CountLeft { get; set; }
+        [CsvHelper.Configuration.Attributes.Index(7)]
+        public string? Price { get; set; }
     };
-    static void exportCsv()
+    static void exportCsv(string path =",", int count=-1)
     {
         var fileName = "products";
-        
+
         //if (File.Exists(fileName+".csv"))
         //{
         //    int i = 1;
         //    for (; File.Exists($"{fileName}({i}).csv"); i++) ;
         //    fileName += $"({i})";
         //}
+        Directory.GetCurrentDirectory();
         fileName += ".csv";
-        
-        using(var context = new ApplicationContext())
+        fileName = path +"\\"+ fileName; 
+        Console.WriteLine(fileName);
+        using (var context = new ApplicationContext(databasePath))
         {
-            var products = context.Products.Include(p => p.ProductInStores).ToList();
-            var dataProducts = new List<ProductRecord>();
+            IEnumerable<Product> products;
+            if(count == -1)
+            {
+                products = context.Products.Include(p => p.ProductInStores).ToList();
+            }
+            else
+            {
+                products = context.Products.Include(p => p.ProductInStores).Take(count).ToList();
+            }
+            
+            var dataProducts = new List<ProductRecordCSV>();
+            var stores = context.Stores.ToList();
             foreach (var product in products)
             {
-                var dataProduct = new ProductRecord
+                if (product.ProductInStores.Count <= 0)
                 {
-                    Id = product.Id,
-                    Name = product.ProductName,
-                    Producer = product.Producer,
-                    InStores = System.Text.Json.JsonSerializer.Serialize(product.ProductInStores)
-                };
-                dataProducts.Add(dataProduct);
+                    var dataProduct = new ProductRecordCSV
+                    {
+                        StoreId = "-1",
+                        Addres = "unknown",
+                        City = "unknown",
+                        ProductId = product.Id.ToString(),
+                        ProductName = product.ProductName,
+                        Producer = "",
+                        CountLeft = "0",
+                        Price = "",
+                    };
+                    dataProducts.Add(dataProduct);
+                    continue;
+                }
+                    foreach (var productInStore in product.ProductInStores)
+                {
+
+                    var dataProduct = new ProductRecordCSV
+                    {
+                        StoreId = productInStore.StoreId.ToString(),
+                        Addres = stores.Find(s => s.Id == productInStore.StoreId)?.Adress??"",
+                        City = stores.Find(s => s.Id == productInStore.StoreId)?.City??"",
+                        ProductId = product.Id.ToString(),
+                        ProductName = product.ProductName,
+                        Producer = product.Producer,
+                        CountLeft = "1",
+                        Price = productInStore.Price.ToString()
+                    };
+                    dataProducts.Add(dataProduct);
+                }
             }
             if (File.Exists(fileName))
             {
                 File.Delete(fileName);
             }
-            var config = new CsvConfiguration(System.Globalization.CultureInfo.CurrentCulture) { Delimiter = ";", Encoding= Encoding.UTF8 };
-            using(var writer = new StreamWriter(fileName))
-                using(var csv = new CsvWriter(writer, config))
+
+            Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+            //Encoding.GetEncoding(1251)
+            var config = new CsvConfiguration(System.Globalization.CultureInfo.CurrentCulture) { Delimiter = ";", Encoding = Encoding.UTF8 };
+            using (var writer = new StreamWriter(
+                new FileStream(fileName, FileMode.OpenOrCreate, FileAccess.ReadWrite),
+                  Encoding.GetEncoding(1251)))
+            using(var csv = new CsvWriter(writer, config))
             {
                 csv.WriteRecords(dataProducts);
             }
@@ -138,16 +217,61 @@ public static class Program
 
     }
 
+    static void exportDb(string dbConnection, int count = -1)
+    {
+        using (var context = new ApplicationContext(databasePath))
+        {
+            IEnumerable<Product> products;
+            if (count == -1)
+            {
+                products = context.Products.Include(p => p.ProductInStores).ToList();
+            }
+            else
+            {
+                products = context.Products.Include(p => p.ProductInStores).Take(count).ToList();
+            }
+
+            var dataProducts = new List<ProductRecordCSV>();
+            var sql = new StringBuilder();
+            sql.Append("INSERT INTO  PfrsDB.mypharmacy(StoreId,Addres,City,ProductId,ProductName, Producer, CountLeft, Price) VALUES");
+            var stores = context.Stores.ToList();
+            foreach (var product in products)
+            {
+                if (product.ProductInStores.Count <= 0)
+                {
+                    sql.Append($"(-1, 'unknown', 'unknown',{product.Id.ToString()},'{product.ProductName}','',0,0),");
+                    continue;
+                }
+                foreach (var productInStore in product.ProductInStores)
+                {
+                    sql.Append($"({productInStore.StoreId.ToString()}, '{stores.Find(s => s.Id == productInStore.StoreId)?.Adress ?? ""}', '{stores.Find(s => s.Id == productInStore.StoreId)?.City ?? ""}',{product.Id.ToString()},'{product.ProductName}','{product.Producer}',1,{productInStore.Price.ToString()}),");
+                }
+            }
+
+
+            var sqlString = sql.ToString();
+            sqlString = sqlString.Substring(0, sqlString.Length-1);
+
+            var connectionString = @"Server=SRV1-EK,614433;Initial Catalog=PfrsDB; User ID = sa;Password=p@assword1";
+            SqlConnection sqlConnection = new SqlConnection(connectionString);
+
+            sqlConnection.Open();
+            SqlCommand cmd = new SqlCommand(sqlString, sqlConnection);
+            cmd.ExecuteScalar();
+        }
+
+    }
+
     static void ClearStores()
     {
-        using (var context = new ApplicationContext())
+        using (var context = new ApplicationContext(databasePath))
         {
             context.Database.ExecuteSqlRaw("TRUNCATE TABLE \"Stores\"");
         }
     }
     static void ClearProducts()
     {
-        using (var context = new ApplicationContext())
+        using (var context = new ApplicationContext(databasePath))
         {
             context.Database.ExecuteSqlRaw("TRUNCATE TABLE \"Products\" CASCADE");
             context.Database.ExecuteSqlRaw("TRUNCATE TABLE \"ProductInStores\" CASCADE");
@@ -208,7 +332,7 @@ public static class Program
         }
 
 
-        using (var context = new ApplicationContext())
+        using (var context = new ApplicationContext(databasePath))
         {
             context.Stores.AddRange(stores);
             context.SaveChanges();
@@ -256,7 +380,7 @@ public static class Program
                         nodesProduct = htmlDoc.DocumentNode.SelectNodes("//a[@class='products-list__item-link-wrapper']");
 
                         var tasks = new List<Task<Tuple<Product, Dictionary<int, string>>>>();
-                        using (var context = new ApplicationContext())
+                        using (var context = new ApplicationContext(databasePath))
                         {
                             var idsInDb = context.Products.Select(p => p.Id).ToList();
 
@@ -304,7 +428,7 @@ public static class Program
 
 
 
-                            using (var context = new ApplicationContext())
+                            using (var context = new ApplicationContext(databasePath))
                             {
                                 var storesWithoutCords = context.Stores
                                     .Where(x => x.Сoordinates == null)
