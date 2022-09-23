@@ -15,6 +15,6 @@ namespace AptekaParsing.Entities
         public int StoreId { get; set; }
         public int CountLeft { get; set; }
         public double Price { get; set; }
-        
+        public DateTime RequestDate{ get; set; }
     }
 }
