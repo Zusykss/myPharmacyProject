@@ -12,6 +12,7 @@ using CsvHelper.Configuration;
 using System.Text;
 using System.Data.SqlClient;
 using System.IO.Compression;
+using Microsoft.Extensions.Configuration;
 
 public static class Program
 {
@@ -32,6 +33,13 @@ public static class Program
             {
                 args = new string[2] { args[0], "" };
             }
+
+            var configs = JsonConvert.DeserializeObject < Dictionary<string, string>>(File.ReadAllText(args[1] +"/appsettings.json"));
+
+            
+
+            ApplicationContext.connectionString = configs["ConnectionString"];
+
             databasePath = args[1];
             var arg = args[0];
 
@@ -42,7 +50,7 @@ public static class Program
 
                 Console.WriteLine("Start Deleting");
                 ClearProducts();
-                using (var context = new ApplicationContext(databasePath))
+                using (var context = new ApplicationContext())
                 {
                     if (context.Stores.Count() <= 0) await ParceAndSaveStores();
                 }
@@ -96,7 +104,7 @@ public static class Program
             }
             else if (arg.Contains("testExport"))
             {
-                exportCsv(args[1], 10);
+                exportCsv(configs["outputPath"], 10);
             }
             logger.LogInformation(DateTime.Now.ToLongTimeString());
             Console.WriteLine("Completed!");
@@ -104,10 +112,11 @@ public static class Program
         }
         catch(Exception ex)
         {
-            Console.WriteLine(ex);
-            logger.LogCritical(ex);
+            Console.WriteLine(ex.Message);
+            logger.LogCritical(ex.Message);
         }
     }
+
     private class ProductRecordCSV 
     {
         [CsvHelper.Configuration.Attributes.Index(0)]
@@ -157,7 +166,7 @@ public static class Program
         fileName += ".csv";
         fileName = path +"\\"+ fileName; 
         Console.WriteLine(fileName);
-        using (var context = new ApplicationContext(databasePath))
+        using (var context = new ApplicationContext())
         {
             IEnumerable<Product> products;
             if(count == -1)
@@ -303,14 +312,14 @@ public static class Program
     }
     static void ClearStores()
     {
-        using (var context = new ApplicationContext(databasePath))
+        using (var context = new ApplicationContext())
         {
             context.Database.ExecuteSqlRaw("TRUNCATE TABLE \"Stores\"");
         }
     }
     static void ClearProducts()
     {
-        using (var context = new ApplicationContext(databasePath))
+        using (var context = new ApplicationContext())
         {
             context.Database.ExecuteSqlRaw("TRUNCATE TABLE \"Products\" CASCADE");
             context.Database.ExecuteSqlRaw("TRUNCATE TABLE \"ProductInStores\" CASCADE");
@@ -371,7 +380,7 @@ public static class Program
         }
 
 
-        using (var context = new ApplicationContext(databasePath))
+        using (var context = new ApplicationContext())
         {
             context.Stores.AddRange(stores);
             context.SaveChanges();
@@ -419,7 +428,7 @@ public static class Program
                         nodesProduct = htmlDoc.DocumentNode.SelectNodes("//a[@class='products-list__item-link-wrapper']");
 
                         var tasks = new List<Task<Tuple<Product, Dictionary<int, string>>>>();
-                        using (var context = new ApplicationContext(databasePath))
+                        using (var context = new ApplicationContext())
                         {
                             var idsInDb = context.Products.Select(p => p.Id).ToList();
 
@@ -467,7 +476,7 @@ public static class Program
 
 
 
-                            using (var context = new ApplicationContext(databasePath))
+                            using (var context = new ApplicationContext())
                             {
                                 var storesWithoutCords = context.Stores
                                     .Where(x => x.Сoordinates == null)
@@ -486,7 +495,7 @@ public static class Program
                     }
                     catch (Exception ex)
                     {
-                        logger.LogCritical(ex);
+                        logger.LogCritical(ex.Message);
                     }
 
                 }
