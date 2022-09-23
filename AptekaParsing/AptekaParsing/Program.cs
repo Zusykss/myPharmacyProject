@@ -454,7 +454,7 @@ public static class Program
                                 logMessages = "";
                             }
 
-                            var products = tasksData.Select(x => x.Item1).ToList();
+                            var products = tasksData.Select(x => x.Item1).Where(x => x is not null).ToList();
 
                             var coordinates = new Dictionary<int, string>();
                             foreach (var dict in tasksData.Select(x => x.Item2).ToList())
@@ -515,7 +515,7 @@ public static class Program
             htmlDock.LoadHtml(html);
             productName = htmlDock.DocumentNode.SelectSingleNode("//div[@class='search-result-head__title-wrapper']/h1").InnerText.Trim();
 
-            return new Tuple<Product, Dictionary<int, string>>(new Product { Id = productId, Producer = null, ProductName = productName, ProductInStores = new List<ProductInStore>() }, new Dictionary<int, string>());
+            return new Tuple<Product, Dictionary<int, string>>(null, new Dictionary<int, string>());
         }
         dynamic pointsData = JsonConvert.DeserializeObject<ExpandoObject>(organizationPointsJson, new ExpandoObjectConverter());
         var storeCoords = new Dictionary<int, string>();
