@@ -228,21 +228,21 @@ public static class Program
 
             Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 
-            //ConvertFileEncoding(fileName, fileName.Replace(".csv", "1252.csv"), Encoding.UTF8, Encoding.GetEncoding(1252));
-            var input = File.ReadAllText(fileName);
-            //input = UTF8toASCII(input);
-            var utf8bytes = Encoding.UTF8.GetBytes(input);
-            input = "";
-            var win1252Bytes = Encoding.Convert(
-                            Encoding.UTF8, Encoding.GetEncoding(1251), utf8bytes);
+            ConvertFileEncoding(fileName, fileName.Replace(".csv", "1251.csv"), Encoding.UTF8, Encoding.GetEncoding(1251));
+            //var input = File.ReadAllText(fileName);
+            ////input = UTF8toASCII(input);
+            //var utf8bytes = Encoding.UTF8.GetBytes(input);
+            //input = "";
+            //var win1252Bytes = Encoding.Convert(
+            //                Encoding.UTF8, Encoding.GetEncoding(1251), utf8bytes);
 
 
 
-            var fileStream = new FileStream(fileName.Replace(".csv", "1251.csv"), FileMode.OpenOrCreate, FileAccess.ReadWrite);
-            using (var writer = new BinaryWriter(fileStream, Encoding.GetEncoding(1251)))
-            {
-                writer.Write(win1252Bytes);
-            }
+            //var fileStream = new FileStream(fileName.Replace(".csv", "1251.csv"), FileMode.OpenOrCreate, FileAccess.ReadWrite);
+            //using (var writer = new BinaryWriter(fileStream, Encoding.GetEncoding(1251)))
+            //{
+            //    writer.Write(win1252Bytes);
+            //}
 
             File.Delete(fileName);
             File.Move(fileName.Replace(".csv", "1251.csv"), fileName);
@@ -333,12 +333,12 @@ public static class Program
             var sqlString = sql.ToString();
             sqlString = sqlString.Substring(0, sqlString.Length-1);
 
-            var connectionString = @"Server=SRV1-EK,614433;Initial Catalog=PfrsDB; User ID = sa;Password=p@assword1";
-            SqlConnection sqlConnection = new SqlConnection(connectionString);
+            //var connectionString = @"Server=SRV1-EK,614433;Initial Catalog=PfrsDB; User ID = sa;Password=p@assword1";
+            //SqlConnection sqlConnection = new SqlConnection(connectionString);
 
-            sqlConnection.Open();
-            SqlCommand cmd = new SqlCommand(sqlString, sqlConnection);
-            cmd.ExecuteScalar();
+            //sqlConnection.Open();
+            //SqlCommand cmd = new SqlCommand(sqlString, sqlConnection);
+            //cmd.ExecuteScalar();
         }
 
     }
