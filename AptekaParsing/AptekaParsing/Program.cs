@@ -132,7 +132,22 @@ public static class Program
         public string? CountLeft { get; set; }
         [CsvHelper.Configuration.Attributes.Index(7)]
         public string? Price { get; set; }
-    };
+        [CsvHelper.Configuration.Attributes.Index(8)]
+        public string ? Coordinat { get; set; }
+        [CsvHelper.Configuration.Attributes.Index(9)]
+        public string? StoreNet { get; set; }
+    }
+
+    public static string UTF8toASCII(string text)
+    {
+        System.Text.Encoding utf8 = System.Text.Encoding.UTF8;
+        Byte[] encodedBytes = utf8.GetBytes(text);
+        Byte[] convertedBytes =
+                Encoding.Convert(Encoding.UTF8, Encoding.ASCII, encodedBytes);
+        System.Text.Encoding ascii = System.Text.Encoding.ASCII;
+
+        return ascii.GetString(convertedBytes);
+    }
     static void exportCsv(string path =",", int count=-1)
     {
         var fileName = "products";
@@ -165,33 +180,33 @@ public static class Program
             {
                 if (product.ProductInStores.Count <= 0)
                 {
-                    var dataProduct = new ProductRecordCSV
-                    {
-                        StoreId = "-1",
-                        Addres = "unknown",
-                        City = "unknown",
-                        ProductId = product.Id.ToString(),
-                        ProductName = product.ProductName,
-                        Producer = "",
-                        CountLeft = "0",
-                        Price = "",
-                    };
-                    dataProducts.Add(dataProduct);
                     continue;
+                    //var dataProduct = new ProductRecordCSV
+                    //{
+                    //    StoreId = "-1",
+                    //    Addres = "unknown",
+                    //    City = "unknown",
+                    //    ProductId = product.Id.ToString(),
+                    //    ProductName = product.ProductName,
+                    //    Producer = "",
+                    //    CountLeft = "0",
+                    //    Price = "",
+                    //};
+                    //dataProducts.Add(dataProduct);
                 }
                     foreach (var productInStore in product.ProductInStores)
                 {
-
+                    var stor = stores.Find(s => s.Id == productInStore.StoreId);
                     var dataProduct = new ProductRecordCSV
                     {
                         StoreId = productInStore.StoreId.ToString(),
-                        Addres = stores.Find(s => s.Id == productInStore.StoreId)?.Adress??"",
-                        City = stores.Find(s => s.Id == productInStore.StoreId)?.City??"",
+                        Addres = stor?.Adress ?? "",
+                        City = stor?.City ?? "",
                         ProductId = product.Id.ToString(),
                         ProductName = product.ProductName,
                         Producer = product.Producer,
                         CountLeft = "1",
-                        Price = productInStore.Price.ToString()
+                        Price = productInStore.Price.ToString().Replace(".", ",")
                     };
                     dataProducts.Add(dataProduct);
                 }
@@ -215,14 +230,16 @@ public static class Program
 
             //ConvertFileEncoding(fileName, fileName.Replace(".csv", "1252.csv"), Encoding.UTF8, Encoding.GetEncoding(1252));
             var input = File.ReadAllText(fileName);
+            //input = UTF8toASCII(input);
             var utf8bytes = Encoding.UTF8.GetBytes(input);
+            input = "";
             var win1252Bytes = Encoding.Convert(
                             Encoding.UTF8, Encoding.GetEncoding(1251), utf8bytes);
 
 
-           
+
             var fileStream = new FileStream(fileName.Replace(".csv", "1251.csv"), FileMode.OpenOrCreate, FileAccess.ReadWrite);
-            using (var writer = new BinaryWriter(fileStream,Encoding.GetEncoding(1251)))
+            using (var writer = new BinaryWriter(fileStream, Encoding.GetEncoding(1251)))
             {
                 writer.Write(win1252Bytes);
             }
