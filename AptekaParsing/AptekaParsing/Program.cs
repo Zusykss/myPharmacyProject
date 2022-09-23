@@ -11,6 +11,7 @@ using Microsoft.EntityFrameworkCore;
 using CsvHelper.Configuration;
 using System.Text;
 using System.Data.SqlClient;
+using System.IO.Compression;
 
 public static class Program
 {
@@ -97,13 +98,6 @@ public static class Program
             {
                 exportCsv(args[1], 10);
             }
-            else if (arg.Contains("dbExport")) {
-                exportDb(args[1], -1);
-            }
-            else if (arg.Contains("dbTestExport"))
-            {
-                exportDb(args[1], 2);
-            }
             logger.LogInformation(DateTime.Now.ToLongTimeString());
             Console.WriteLine("Completed!");
 
@@ -136,6 +130,8 @@ public static class Program
         public string ? Coordinat { get; set; }
         [CsvHelper.Configuration.Attributes.Index(9)]
         public string? StoreNet { get; set; }
+        [CsvHelper.Configuration.Attributes.Index(10)]
+        public string? RequestDate{ get; set; }
     }
 
     public static string UTF8toASCII(string text)
@@ -150,8 +146,7 @@ public static class Program
     }
     static void exportCsv(string path =",", int count=-1)
     {
-        var fileName = "products";
-
+        var fileName = "MyApteka";
         //if (File.Exists(fileName+".csv"))
         //{
         //    int i = 1;
@@ -197,6 +192,7 @@ public static class Program
                     foreach (var productInStore in product.ProductInStores)
                 {
                     var stor = stores.Find(s => s.Id == productInStore.StoreId);
+                    var cords = String.Join(",", stor?.Сoordinates.Split(" ").Select(el => el.Replace(",", ".")) ?? new string[0]);
                     var dataProduct = new ProductRecordCSV
                     {
                         StoreId = productInStore.StoreId.ToString(),
@@ -206,7 +202,10 @@ public static class Program
                         ProductName = product.ProductName,
                         Producer = product.Producer,
                         CountLeft = "1",
-                        Price = productInStore.Price.ToString().Replace(".", ",")
+                        Price = productInStore.Price.ToString().Replace(".", ","),
+                        Coordinat = cords,
+                        StoreNet = stor?.Name,
+                        RequestDate = productInStore?.RequestDate.ToString("yyyy-MM-dd HH:mm:ss")??""
                     };
                     dataProducts.Add(dataProduct);
                 }
@@ -229,23 +228,27 @@ public static class Program
             Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 
             ConvertFileEncoding(fileName, fileName.Replace(".csv", "1251.csv"), Encoding.UTF8, Encoding.GetEncoding(1251));
-            //var input = File.ReadAllText(fileName);
-            ////input = UTF8toASCII(input);
-            //var utf8bytes = Encoding.UTF8.GetBytes(input);
-            //input = "";
-            //var win1252Bytes = Encoding.Convert(
-            //                Encoding.UTF8, Encoding.GetEncoding(1251), utf8bytes);
 
-
-
-            //var fileStream = new FileStream(fileName.Replace(".csv", "1251.csv"), FileMode.OpenOrCreate, FileAccess.ReadWrite);
-            //using (var writer = new BinaryWriter(fileStream, Encoding.GetEncoding(1251)))
-            //{
-            //    writer.Write(win1252Bytes);
-            //}
 
             File.Delete(fileName);
-            File.Move(fileName.Replace(".csv", "1251.csv"), fileName);
+            var currentMothDay = DateTime.Now.ToString("dd");
+            if(File.Exists(fileName.Replace(".csv", $"-{currentMothDay}.csv")))
+            {
+                File.Delete(fileName.Replace(".csv", $"-{currentMothDay}.csv"));
+            }
+            File.Move(fileName.Replace(".csv", "1251.csv"), fileName.Replace(".csv", $"-{currentMothDay}.csv"));
+            fileName = fileName.Replace(".csv", $"-{currentMothDay}.csv");
+
+            var archiveName = $"{path}\\MyApteka-{currentMothDay}.zip";
+            if (File.Exists(archiveName))
+            {
+                File.Delete(archiveName);
+            }
+            using (var archive = ZipFile.Open(archiveName, ZipArchiveMode.Create))
+            {
+                    archive.CreateEntryFromFile(fileName, Path.GetFileName(fileName));
+            }
+
         }
 
 
@@ -298,51 +301,6 @@ public static class Program
             File.Delete(tempName);
         }
     }
-        static void exportDb(string dbConnection, int count = -1)
-    {
-        using (var context = new ApplicationContext(databasePath))
-        {
-            IEnumerable<Product> products;
-            if (count == -1)
-            {
-                products = context.Products.Include(p => p.ProductInStores).ToList();
-            }
-            else
-            {
-                products = context.Products.Include(p => p.ProductInStores).Take(count).ToList();
-            }
-
-            var dataProducts = new List<ProductRecordCSV>();
-            var sql = new StringBuilder();
-            sql.Append("INSERT INTO  PfrsDB.mypharmacy(StoreId,Addres,City,ProductId,ProductName, Producer, CountLeft, Price) VALUES");
-            var stores = context.Stores.ToList();
-            foreach (var product in products)
-            {
-                if (product.ProductInStores.Count <= 0)
-                {
-                    sql.Append($"(-1, 'unknown', 'unknown',{product.Id.ToString()},'{product.ProductName}','',0,0),");
-                    continue;
-                }
-                foreach (var productInStore in product.ProductInStores)
-                {
-                    sql.Append($"({productInStore.StoreId.ToString()}, '{stores.Find(s => s.Id == productInStore.StoreId)?.Adress ?? ""}', '{stores.Find(s => s.Id == productInStore.StoreId)?.City ?? ""}',{product.Id.ToString()},'{product.ProductName}','{product.Producer}',1,{productInStore.Price.ToString()}),");
-                }
-            }
-
-
-            var sqlString = sql.ToString();
-            sqlString = sqlString.Substring(0, sqlString.Length-1);
-
-            //var connectionString = @"Server=SRV1-EK,614433;Initial Catalog=PfrsDB; User ID = sa;Password=p@assword1";
-            //SqlConnection sqlConnection = new SqlConnection(connectionString);
-
-            //sqlConnection.Open();
-            //SqlCommand cmd = new SqlCommand(sqlString, sqlConnection);
-            //cmd.ExecuteScalar();
-        }
-
-    }
-
     static void ClearStores()
     {
         using (var context = new ApplicationContext(databasePath))
@@ -580,7 +538,7 @@ public static class Program
 
             int countLeft = 1;
 
-            var productInStore = new ProductInStore { Price = price, CountLeft = countLeft, StoreId = storeId, ProductId = productId };
+            var productInStore = new ProductInStore { Price = price, CountLeft = countLeft, StoreId = storeId, ProductId = productId, RequestDate=DateTime.Now};
             productInStores.Add(productInStore);
 
         }
