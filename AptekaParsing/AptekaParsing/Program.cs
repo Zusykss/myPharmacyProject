@@ -50,14 +50,10 @@ public static class Program
 
                 Console.WriteLine("Start Deleting");
                 ClearProducts();
-                using (var context = new ApplicationContext())
-                {
-                    if (context.Stores.Count() <= 0) await ParceAndSaveStores();
-                }
+                await ParceAndSaveStores();
                 Console.WriteLine("Start Parsing");
                 await MainParce();
-                exportCsv(args[1]);
-
+                exportCsv(configs["outputPath"]);
                 return;
             };
 
@@ -90,7 +86,7 @@ public static class Program
                 Console.WriteLine("Start Parsing");
                 await MainParce();
             }
-            else if (arg.Contains("parceStores"))
+            else if (arg.Contains("refreshStores"))
             {
                 await ParceAndSaveStores();
             }
@@ -100,7 +96,7 @@ public static class Program
             }
             else if (arg.Contains("fastExport"))
             {
-                exportCsv(args[1]);
+                exportCsv(configs["outputPath"]);
             }
             else if (arg.Contains("testExport"))
             {
@@ -211,7 +207,7 @@ public static class Program
                         ProductName = product.ProductName,
                         Producer = product.Producer,
                         CountLeft = "1",
-                        Price = productInStore.Price.ToString().Replace(".", ","),
+                        Price = productInStore.Price.ToString().Replace(",", "."),
                         Coordinat = cords,
                         StoreNet = stor?.Name,
                         RequestDate = productInStore?.RequestDate.ToString("yyyy-MM-dd HH:mm:ss")??""
@@ -340,51 +336,55 @@ public static class Program
         var chainNodes = chainsHtmlDock.DocumentNode.SelectNodes("//a[@class='chains-items__list-link']");
 
         List<DrugStore> stores = new List<DrugStore>();
-        foreach (var chainNode in chainNodes)
-        {
-            var chainStoresHtml = await webScraper.GetHtml(chainNode.Attributes["href"].Value);
-            var chainHtmlDock = new HtmlDocument();
-
-            chainHtmlDock.LoadHtml(chainStoresHtml);
-
-
-            var StoreNodes = chainHtmlDock.DocumentNode.SelectNodes("//li[@class='chain-sublist__item']");
-            string? chainSite = null;
-            foreach (var storeNode in StoreNodes)
-            {
-                var singleStoreNode = HtmlNode.CreateNode(storeNode.OuterHtml);
-                var fullAdress = singleStoreNode.SelectSingleNode("//a[@class='chain-sublist__item-link']").InnerText;
-
-                var adress = String.Join(',', fullAdress.Split(',').Skip(1)).Trim();
-                var city = fullAdress.Split(',')[1].Trim();
-                var name = fullAdress.Split(',')[0].Trim();
-
-                var storeLink = singleStoreNode.SelectSingleNode("//a[@class='chain-sublist__item-link']").Attributes["href"].Value;
-                var pattern = @"drugstore\/(\d+)\/";
-                var stringId = Regex.Match(storeLink, pattern).Groups[1].Value;
-                var id = Convert.ToInt32(stringId);
-
-                var phoneNumber = singleStoreNode.SelectSingleNode("//p[@class='chain-sublist__item-element chain-sublist__item-element--second']")?.InnerText.Trim();
-
-                if (chainSite == null)
-                {
-                    var storeHtml = await webScraper.GetHtml(storeLink);
-                    var storeHtmlDock = new HtmlDocument();
-                    storeHtmlDock.LoadHtml(storeHtml);
-                    chainSite = storeHtmlDock.DocumentNode.SelectSingleNode("//a[@class='drugstore-contacts__item-link']")?.Attributes["href"].Value ?? "";
-                }
-
-                DrugStore store = new DrugStore { Adress = adress, City = city, Name = name, Site = chainSite, Id = id, PhoneNumber = phoneNumber };
-                stores.Add(store);
-            }
-        }
-
-
         using (var context = new ApplicationContext())
         {
+            var storesInDb = context.Stores.ToList();
+            foreach (var chainNode in chainNodes)
+            {
+                var chainStoresHtml = await webScraper.GetHtml(chainNode.Attributes["href"].Value);
+                var chainHtmlDock = new HtmlDocument();
+
+                chainHtmlDock.LoadHtml(chainStoresHtml);
+
+
+                var StoreNodes = chainHtmlDock.DocumentNode.SelectNodes("//li[@class='chain-sublist__item']");
+                string? chainSite = null;
+                foreach (var storeNode in StoreNodes)
+                {
+                    var singleStoreNode = HtmlNode.CreateNode(storeNode.OuterHtml);
+                    var fullAdress = singleStoreNode.SelectSingleNode("//a[@class='chain-sublist__item-link']").InnerText;
+
+                    var adress = String.Join(',', fullAdress.Split(',').Skip(1)).Trim();
+                    var city = fullAdress.Split(',')[1].Trim();
+                    var name = fullAdress.Split(',')[0].Trim();
+
+                    var storeLink = singleStoreNode.SelectSingleNode("//a[@class='chain-sublist__item-link']").Attributes["href"].Value;
+                    var pattern = @"drugstore\/(\d+)\/";
+                    var stringId = Regex.Match(storeLink, pattern).Groups[1].Value;
+                    var id = Convert.ToInt32(stringId);
+
+                    var phoneNumber = singleStoreNode.SelectSingleNode("//p[@class='chain-sublist__item-element chain-sublist__item-element--second']")?.InnerText.Trim();
+
+                    if (storesInDb.Find(s => s.Id == id) != null)
+                    {
+                        continue;
+                    } 
+
+                    if (chainSite == null)
+                    {
+                        var storeHtml = await webScraper.GetHtml(storeLink);
+                        var storeHtmlDock = new HtmlDocument();
+                        storeHtmlDock.LoadHtml(storeHtml);
+                        chainSite = storeHtmlDock.DocumentNode.SelectSingleNode("//a[@class='drugstore-contacts__item-link']")?.Attributes["href"].Value ?? "";
+                    }
+                    
+                    DrugStore store = new DrugStore { Adress = adress, City = city, Name = name, Site = chainSite, Id = id, PhoneNumber = phoneNumber };
+                    stores.Add(store);
+                }
+            }
+
             context.Stores.AddRange(stores);
             context.SaveChanges();
-
         }
 
     }
