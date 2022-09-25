@@ -100,7 +100,7 @@ public static class Program
             }
             else if (arg.Contains("testExport"))
             {
-                exportCsv(configs["outputPath"], 10);
+                exportCsv(configs["outputPath"], 20);
             }
             logger.LogInformation(DateTime.Now.ToLongTimeString());
             Console.WriteLine("Completed!");
@@ -542,10 +542,17 @@ public static class Program
 
             storeCoords.Add(storeId, cords);
 
-            if (value.ordersOn == false) continue;
             var price = value.price;
-
-            int countLeft = 1;
+            int countLeft = 0;
+            if (value.ordersOn == false)
+            {
+                countLeft = 0;
+            }
+            else
+            {
+                countLeft = 1;
+            }
+                
 
             var productInStore = new ProductInStore { Price = price, CountLeft = countLeft, StoreId = storeId, ProductId = productId, RequestDate=DateTime.Now};
             productInStores.Add(productInStore);

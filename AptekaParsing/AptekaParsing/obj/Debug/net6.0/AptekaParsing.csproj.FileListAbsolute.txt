@@ -1,5 +1,4 @@
 C:\Users\lomak\Source\Repos\myPharmacyProject\AptekaParsing\AptekaParsing\bin\Debug\net6.0\AptekaParsing.exe
-C:\Users\lomak\Source\Repos\myPharmacyProject\AptekaParsing\AptekaParsing\bin\Debug\net6.0\psqlConnection.txt
 C:\Users\lomak\Source\Repos\myPharmacyProject\AptekaParsing\AptekaParsing\bin\Debug\net6.0\AptekaParsing.deps.json
 C:\Users\lomak\Source\Repos\myPharmacyProject\AptekaParsing\AptekaParsing\bin\Debug\net6.0\AptekaParsing.runtimeconfig.json
 C:\Users\lomak\Source\Repos\myPharmacyProject\AptekaParsing\AptekaParsing\bin\Debug\net6.0\AptekaParsing.dll
