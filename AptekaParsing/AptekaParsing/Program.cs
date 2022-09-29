@@ -354,6 +354,8 @@ public static class Program
                     var singleStoreNode = HtmlNode.CreateNode(storeNode.OuterHtml);
                     var fullAdress = singleStoreNode.SelectSingleNode("//a[@class='chain-sublist__item-link']").InnerText;
 
+                    fullAdress = fullAdress.Replace(";", "|");
+
                     var adress = String.Join(',', fullAdress.Split(',').Skip(1)).Trim();
                     var city = fullAdress.Split(',')[1].Trim();
                     var name = fullAdress.Split(',')[0].Trim();
