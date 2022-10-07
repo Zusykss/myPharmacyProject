@@ -13,6 +13,7 @@ using System.Text;
 using System.Data.SqlClient;
 using System.IO.Compression;
 using Microsoft.Extensions.Configuration;
+using System.Net;
 
 public static class Program
 {
@@ -110,6 +111,7 @@ public static class Program
         {
             Console.WriteLine(ex.Message);
             logger.LogCritical(ex.Message);
+            logger.LogCritical(ex.StackTrace);
         }
     }
 
@@ -445,17 +447,25 @@ public static class Program
 
                         foreach (var link in allLinksOnPage)
                         {
-                            tasks.Add(ParceProductAndStoresCoordinates(link));
+                            //tasks.Add();
+                            //await Task.Delay(5000);
                         }
 
 
-                        const int tasksCount = 30;
+                        const int tasksCount = 2;
 
 
-                        while (tasks.Count > 0)
+                        while (allLinksOnPage.Count > 0)
                         {
-                            var currentTasks = tasks.Take(tasksCount);
-                            tasks = tasks.Skip(tasksCount).ToList();
+                            var currentTasks = new List<Task<Tuple<Product, Dictionary<int, string>>>>();
+
+                            foreach (var link in allLinksOnPage.Take(tasksCount).ToList())
+                            {
+                                currentTasks.Add(ParceProductAndStoresCoordinates(link));
+                            }
+                            allLinksOnPage = allLinksOnPage.Skip(tasksCount).ToList();
+
+                            
 
                             var tasksData = await Task.WhenAll(currentTasks);
 
@@ -498,6 +508,7 @@ public static class Program
                     catch (Exception ex)
                     {
                         logger.LogCritical(ex.Message);
+                        logger.LogCritical(ex.StackTrace);
                     }
 
                 }
@@ -506,6 +517,7 @@ public static class Program
     }
     async static Task<Tuple<Product, Dictionary<int, string>>> ParceProductAndStoresCoordinates(string link)
     {
+
         WebScraper webScraper = new WebScraper();
         var html = await webScraper.GetHtml(link);
 
@@ -554,15 +566,48 @@ public static class Program
             {
                 countLeft = 1;
             }
-                
 
-            var productInStore = new ProductInStore { Price = price, CountLeft = countLeft, StoreId = storeId, ProductId = productId, RequestDate=DateTime.Now};
+
+            var productInStore = new ProductInStore { Price = price, CountLeft = countLeft, StoreId = storeId, ProductId = productId, RequestDate = DateTime.Now };
             productInStores.Add(productInStore);
 
         }
-        
+
         var productDataPattern = "{\"id\":" + productId + ",\"name\":\"(.+?)\",\"producer\":\"(.+?)\"}";
 
+
+        var organizationHeadProductIdPattern = @"drugstores-list__btn-reserve order\d+-(\d+)";
+        var organizationHeadProductId = Regex.Match(html, organizationHeadProductIdPattern).Groups[1].Value;
+
+
+        const int tasksCount = 2;
+        const int storesPerThread = 100;
+
+        var productsInStoresWhereAvailible = productInStores.Where(el => el.CountLeft == 1).ToList();
+
+        
+
+        var strangeProductId = Regex.Match(html, @"comparisonBtn(\d+)").Groups[1].Value;
+
+        while (productsInStoresWhereAvailible.Count > 0)
+        {
+            var tasks = new List<Task>();
+
+            for (var i = 0; i < tasksCount; i++)
+            {
+                var storesInDbPerThread = productsInStoresWhereAvailible.Take(storesPerThread).ToList();
+                productsInStoresWhereAvailible = productsInStoresWhereAvailible.Skip(storesPerThread).ToList();
+
+                tasks.Add(setLeftCountInStores(storesInDbPerThread, strangeProductId));
+                await Task.Delay(100);
+            }
+            await Task.WhenAll(tasks);
+            //await Task.Delay(100);
+        }
+           
+
+
+        
         var productData = Regex.Match(html, productDataPattern).Groups;
         productName = productData[1].Value.Replace("\\\"", "\"").Replace("\\\'", "\'");
         var productProducer = productData[2].Value.Replace("\\\"", "\"").Replace("\\\'", "\'");
@@ -571,26 +616,138 @@ public static class Program
 
         return new Tuple<Product, Dictionary<int, string>>(product, storeCoords);
     }
-    //private static async Task<string> PostAsyncJson(string uri, string data)
-    //{
-    //    byte[] dataBytes = Encoding.UTF8.GetBytes(data);
+    
 
-    //    HttpWebRequest request = (HttpWebRequest)WebRequest.Create(uri);
-    //    request.AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate;
-    //    request.ContentLength = dataBytes.Length;
-    //    request.ContentType = "application/json";
-    //    request.Method = "POST";
-    //    request.CookieContainer = new CookieContainer();
-    //    request.CookieContainer.Add(new Cookie("SESSION", "SESSION =M2RiMjU1YTQtZWJiOS00YTRlLTk0YzItZTc0MzI0YWE3ZTE3"));
+    private static async Task setLeftCountInStores(List<ProductInStore> productsInStore, string strangeProductId)
+    {
+        await Task.Delay(1);
+        var baseAddress = new Uri("https://mypharmacy.com.ua");
+        CookieContainer cookieContainer = new CookieContainer();
+        
+
+        using (var handler = new HttpClientHandler() { CookieContainer = cookieContainer, UseCookies=true })
+        using (var client = new HttpClient(handler) { BaseAddress=baseAddress})
+        {
 
 
-    //    using (HttpWebResponse response = (HttpWebResponse)await request.GetResponseAsync())
-    //    using (Stream stream = response.GetResponseStream())
-    //    using (StreamReader reader = new StreamReader(stream))
-    //    {
-    //        return await reader.ReadToEndAsync();
-    //    }
-    //}
+            string cookie = "";
+            foreach (var productInStore in productsInStore)
+            {
+                ///Add To +
+                ///Cart
+                var response = client.GetAsync($"getOrganizationContent?organizationId={productInStore.StoreId}&productId={strangeProductId}&filterSkuId={productInStore.ProductId}").Result;
+                var html = response.Content.ReadAsStringAsync().Result;
+                
+
+                if(cookie == "")
+                { 
+                    cookie = response.Headers.GetValues("Set-Cookie").First();
+                    cookieContainer.SetCookies(baseAddress, cookie);
+                }
+
+                
+                var organizationHeadProductId = Regex.Match(html, $"addOrganizationHeadProductToOrder\\({productInStore.StoreId}, (\\d+)\\)")?.Groups[1]?.Value;
+                if (organizationHeadProductId is null || organizationHeadProductId == "")continue ;
+
+                var data = new Dictionary<string, string>();
+                data["requestType"] = "AddOrganizationHeadProductOrSkuToOrderRequest";
+                data["organizationId"] = productInStore.StoreId.ToString();
+                data["organizationHeadProductId"] = organizationHeadProductId;
+                var dataJson = JsonConvert.SerializeObject(data);
+                var content = new StringContent(dataJson, Encoding.UTF8, "application/json");
+
+                response = client.PostAsync("api/command", content).Result;
+
+                
+                var result = response.Content.ReadAsStringAsync().Result;
+                var resultParsed = JsonConvert.DeserializeObject<Dictionary<string, string>>(result);
+
+
+
+                ///Get Quantity
+                data = new Dictionary<string, string>();
+                data["requestType"] = "SaveSkuQuantityByOrganizationForOrderRequest";
+                data["organizationId"] = productInStore.StoreId.ToString(); ;
+                data["organizationHeadProductId"] = organizationHeadProductId;
+                data["quantity"] = "2";
+                dataJson = JsonConvert.SerializeObject(data);
+                content = new StringContent(dataJson, Encoding.UTF8, "application/json");
+                response = client.PostAsync("api/command", content).Result;
+
+                if (response.StatusCode != HttpStatusCode.OK) {
+
+                    await Task.Delay(5000);
+                    organizationHeadProductId = Regex.Match(html, $"addOrganizationHeadProductToOrder\\({productInStore.StoreId}, (\\d+)\\)")?.Groups[1]?.Value;
+
+                    data = new Dictionary<string, string>();
+                    data["requestType"] = "AddOrganizationHeadProductOrSkuToOrderRequest";
+                    data["organizationId"] = productInStore.StoreId.ToString();
+                    data["organizationHeadProductId"] = organizationHeadProductId;
+                    dataJson = JsonConvert.SerializeObject(data);
+                    content = new StringContent(dataJson, Encoding.UTF8, "application/json");
+
+                    response = client.PostAsync("api/command", content).Result;
+
+
+
+
+                    if (response.StatusCode != HttpStatusCode.OK) continue;
+                    result = response.Content.ReadAsStringAsync().Result;
+
+                    resultParsed = JsonConvert.DeserializeObject<Dictionary<string, string>>(result);
+                    if (resultParsed["success"] != "true") continue;
+
+
+
+                    ///Get Quantity
+                    data = new Dictionary<string, string>();
+                    data["requestType"] = "SaveSkuQuantityByOrganizationForOrderRequest";
+                    data["organizationId"] = productInStore.StoreId.ToString(); ;
+                    data["organizationHeadProductId"] = organizationHeadProductId;
+                    data["quantity"] = "2";
+                    dataJson = JsonConvert.SerializeObject(data);
+                    content = new StringContent(dataJson, Encoding.UTF8, "application/json");
+                    response = client.PostAsync("api/command", content).Result;
+
+
+                    if (response.StatusCode != HttpStatusCode.OK)
+                    {
+                        Console.WriteLine(baseAddress.ToString() + $"getOrganizationContent?organizationId={productInStore.StoreId}&productId={strangeProductId}&filterSkuId={productInStore.ProductId}");
+                        Console.WriteLine("Store id = " + productInStore.StoreId + " product id = " + productInStore.ProductId + " head id = " + organizationHeadProductId);
+                        continue;
+                    }
+                };
+                result = response.Content.ReadAsStringAsync().Result;
+
+                var maxQuantityStr = Regex.Match(result, @"""maxQuantity"":(\d+)").Groups[1].Value;
+
+                int quantity = 1;
+
+                try
+                {
+                    quantity= Convert.ToInt32(maxQuantityStr);
+                }
+                catch(Exception e)
+                {
+                    Console.WriteLine(e.Message);
+                }
+
+                productInStore.CountLeft = quantity;
+
+                
+                ///Delete from cart
+                ///
+                data = new Dictionary<string, string>();
+                data["requestType"] = "DeleteOrganizationHeadProductOrSkuFromOrderRequest";
+                data["organizationId"] = productInStore.StoreId.ToString(); ;
+                data["organizationHeadProductId"] = organizationHeadProductId;
+                dataJson = JsonConvert.SerializeObject(data);
+                content = new StringContent(dataJson, Encoding.UTF8, "application/json");
+                response = client.PostAsync("api/command", content).Result;
+            }
+        }
+        
+    }
 
 }
 

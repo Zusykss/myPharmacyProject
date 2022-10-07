@@ -1,8 +1,0 @@
-{
-  "profiles": {
-    "AptekaParsing": {
-      "commandName": "Project",
-      "commandLineArgs": "testExport \"C:\\Users\\lomak\\source\\repos\\myPharmacyProject\\AptekaParsing\\AptekaParsing\\bin\\publish\""
-    }
-  }
-}
