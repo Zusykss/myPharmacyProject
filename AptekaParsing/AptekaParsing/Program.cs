@@ -452,7 +452,7 @@ public static class Program
                         }
 
 
-                        const int tasksCount = 2;
+                        const int tasksCount = 10;
 
 
                         while (allLinksOnPage.Count > 0)
@@ -580,12 +580,12 @@ public static class Program
         var organizationHeadProductId = Regex.Match(html, organizationHeadProductIdPattern).Groups[1].Value;
 
 
-        const int tasksCount = 2;
-        const int storesPerThread = 100;
+        const int tasksCount =40;
+        const int storesPerThread = 50;
 
         var productsInStoresWhereAvailible = productInStores.Where(el => el.CountLeft == 1).ToList();
 
-        
+
 
         var strangeProductId = Regex.Match(html, @"comparisonBtn(\d+)").Groups[1].Value;
 
@@ -593,21 +593,21 @@ public static class Program
         {
             var tasks = new List<Task>();
 
-            for (var i = 0; i < tasksCount; i++)
+            for (var i = 0; i < tasksCount&& productsInStoresWhereAvailible.Count>0; i++)
             {
                 var storesInDbPerThread = productsInStoresWhereAvailible.Take(storesPerThread).ToList();
                 productsInStoresWhereAvailible = productsInStoresWhereAvailible.Skip(storesPerThread).ToList();
 
                 tasks.Add(setLeftCountInStores(storesInDbPerThread, strangeProductId));
-                await Task.Delay(100);
+                await Task.Delay(10);
             }
             await Task.WhenAll(tasks);
             //await Task.Delay(100);
         }
-           
 
 
-        
+
+
         var productData = Regex.Match(html, productDataPattern).Groups;
         productName = productData[1].Value.Replace("\\\"", "\"").Replace("\\\'", "\'");
         var productProducer = productData[2].Value.Replace("\\\"", "\"").Replace("\\\'", "\'");
@@ -629,7 +629,7 @@ public static class Program
         using (var client = new HttpClient(handler) { BaseAddress=baseAddress})
         {
 
-
+            int fails=0;
             string cookie = "";
             foreach (var productInStore in productsInStore)
             {
@@ -712,8 +712,8 @@ public static class Program
 
                     if (response.StatusCode != HttpStatusCode.OK)
                     {
-                        Console.WriteLine(baseAddress.ToString() + $"getOrganizationContent?organizationId={productInStore.StoreId}&productId={strangeProductId}&filterSkuId={productInStore.ProductId}");
-                        Console.WriteLine("Store id = " + productInStore.StoreId + " product id = " + productInStore.ProductId + " head id = " + organizationHeadProductId);
+                        Console.WriteLine("404: " + "Store id = " + productInStore.StoreId + " product id = " + productInStore.ProductId + " head id = " + organizationHeadProductId);
+                        fails += 1;
                         continue;
                     }
                 };
@@ -745,6 +745,7 @@ public static class Program
                 content = new StringContent(dataJson, Encoding.UTF8, "application/json");
                 response = client.PostAsync("api/command", content).Result;
             }
+            Console.WriteLine("{0}/{1}", fails, productsInStore.Count);
         }
         
     }
