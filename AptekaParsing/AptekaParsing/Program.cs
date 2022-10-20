@@ -452,7 +452,7 @@ public static class Program
                         }
 
 
-                        const int tasksCount = 10;
+                        const int tasksCount = 28;
 
 
                         while (allLinksOnPage.Count > 0)
@@ -580,30 +580,30 @@ public static class Program
         var organizationHeadProductId = Regex.Match(html, organizationHeadProductIdPattern).Groups[1].Value;
 
 
-        const int tasksCount =40;
-        const int storesPerThread = 50;
+        //const int tasksCount =40;
+        //const int storesPerThread = 50;
 
-        var productsInStoresWhereAvailible = productInStores.Where(el => el.CountLeft == 1).ToList();
+        //var productsInStoresWhereAvailible = productInStores.Where(el => el.CountLeft == 1).ToList();
 
 
 
-        var strangeProductId = Regex.Match(html, @"comparisonBtn(\d+)").Groups[1].Value;
+        //var strangeProductId = Regex.Match(html, @"comparisonBtn(\d+)").Groups[1].Value;
 
-        while (productsInStoresWhereAvailible.Count > 0)
-        {
-            var tasks = new List<Task>();
+        //while (productsInStoresWhereAvailible.Count > 0)
+        //{
+        //    var tasks = new List<Task>();
 
-            for (var i = 0; i < tasksCount&& productsInStoresWhereAvailible.Count>0; i++)
-            {
-                var storesInDbPerThread = productsInStoresWhereAvailible.Take(storesPerThread).ToList();
-                productsInStoresWhereAvailible = productsInStoresWhereAvailible.Skip(storesPerThread).ToList();
+        //    for (var i = 0; i < tasksCount&& productsInStoresWhereAvailible.Count>0; i++)
+        //    {
+        //        var storesInDbPerThread = productsInStoresWhereAvailible.Take(storesPerThread).ToList();
+        //        productsInStoresWhereAvailible = productsInStoresWhereAvailible.Skip(storesPerThread).ToList();
 
-                tasks.Add(setLeftCountInStores(storesInDbPerThread, strangeProductId));
-                await Task.Delay(10);
-            }
-            await Task.WhenAll(tasks);
-            //await Task.Delay(100);
-        }
+        //        tasks.Add(setLeftCountInStores(storesInDbPerThread, strangeProductId));
+        //        await Task.Delay(10);
+        //    }
+        //    await Task.WhenAll(tasks);
+        //    //await Task.Delay(100);
+        //}
 
 
 
