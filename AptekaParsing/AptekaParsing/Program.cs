@@ -255,7 +255,7 @@ public static class Program
             {
                     archive.CreateEntryFromFile(fileName, Path.GetFileName(fileName));
             }
-
+            File.Delete(fileName);
         }
 
 
