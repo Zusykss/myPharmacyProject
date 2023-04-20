@@ -7,30 +7,26 @@ using System.Threading.Tasks;
 
 namespace AptekaParsing
 {
-    public class LogWriter
+    public static class LogWriter
     {
         
-        private string path;
-        public LogWriter(string filePath)
-        {
-            path =  filePath;
-        }
+        public static string Path;
 
 
-        public void LogCritical(string message)
+        public static void LogCritical(string message)
         {
             Log(LogLevel.Critical, message);
         }
-        public void LogCritical(Exception ex)
+        public static void LogCritical(Exception ex)
         {
             Log(LogLevel.Critical, ex);
         }
-        public void LogInformation(string message)
+        public static void LogInformation(string message)
         {
             Log(LogLevel.Information, message);
         }
 
-        public void Log(LogLevel logLevel, string message, params object?[] args)
+        public static void Log(LogLevel logLevel, string message, params object?[] args)
         {
             var levelMessage = getLevelMessage(logLevel);
 
@@ -38,7 +34,7 @@ namespace AptekaParsing
             Console.WriteLine(logMessage);
             WriteToFile(logMessage);
         }
-        public void Log(LogLevel logLevel, Exception? exception)
+        public static void Log(LogLevel logLevel, Exception? exception)
         {
             var levelMessage = getLevelMessage(logLevel);
             var logMessage = levelMessage + exception.Message;
@@ -51,7 +47,7 @@ namespace AptekaParsing
         }
 
 
-        private string getLevelMessage(LogLevel logLevel)
+        private static string getLevelMessage(LogLevel logLevel)
         {
             string levelMessage = logLevel switch
             {
@@ -61,18 +57,18 @@ namespace AptekaParsing
             };
             return levelMessage;
         }
-        private void WriteToFile(string message)
+        private static void  WriteToFile(string message)
         {
-            if (!File.Exists(path))
+            if (!File.Exists(Path))
             {
-                using (StreamWriter sw = File.CreateText(path))
+                using (StreamWriter sw = File.CreateText(Path))
                 {
                     sw.WriteLine(message);
                 }
                 return;
             }
 
-            using (StreamWriter sw = File.AppendText(path))
+            using (StreamWriter sw = File.AppendText(Path))
             {
                 sw.WriteLine(message);
             }

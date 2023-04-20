@@ -40,6 +40,8 @@ namespace AptekaParsing
             }
             catch (Exception ex)
             {
+                LogWriter.LogCritical(ex.Message);
+                LogWriter.LogCritical(ex.StackTrace);
             }
             return "";
         }
@@ -78,26 +80,7 @@ namespace AptekaParsing
         public async Task<string> GetHtml(string url)
         {
             string str = "";
-            if (!url.Contains("rozetka") && !url.Contains("eldorado"))
-            {
-                str = await HttpClientLoader(url);
-            }
-            if (str == "" || str.Contains("ERROR HTTPCLIENT") || str.Contains("Please Wait... | Cloudflare") || str.Contains("403 Forbidden")|| str.Contains(":443"))
-            {
-                str = await BrowserLoader(url, 0);
-            }
-
-            if (str.Contains("Please Wait... | Cloudflare") || str.Contains("Error 404")
-            || str.Contains("403 Forbidden")
-            || str.Contains("404 Not Found")
-            || str.Contains("503 Service Unavailable")
-            || str.Contains("502 Bad Gateway")
-            || str.Contains("500 Internal Server Error")
-            || str.Contains("400 Bad Request")
-            || str.Contains(":443"))
-            {
-                return str;
-            }
+            str = await HttpClientLoader(url);
             return str;
         }
         private async Task<string> BrowserLoader(string url, int count)

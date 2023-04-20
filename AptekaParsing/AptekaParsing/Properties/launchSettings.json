@@ -2,7 +2,7 @@
   "profiles": {
     "AptekaParsing": {
       "commandName": "Project",
-      "commandLineArgs": "MainParse \"C:\\Users\\lomak\\source\\repos\\myPharmayProject\\AptekaParsing\\AptekaParsing\\bin\\Debug\\net6.0\""
+      "commandLineArgs": "mainParce \"C:\\Users\\lomak\\source\\repos\\myPharmacyProject\\AptekaParsing\\AptekaParsing\\bin\\Debug\\net6.0\""
     }
   }
 }

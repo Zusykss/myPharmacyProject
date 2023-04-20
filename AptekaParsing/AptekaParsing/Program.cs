@@ -22,7 +22,6 @@ public static class Program
         MainAsync(args).GetAwaiter().GetResult();
     }
     private static string logMessages="";
-    private static LogWriter logger;
     private static string databasePath="";
 
     public static async Task MainAsync(string[] args)
@@ -34,8 +33,8 @@ public static class Program
             {
                 args = new string[2] { args[0], "" };
             }
-
-            var configs = JsonConvert.DeserializeObject < Dictionary<string, string>>(File.ReadAllText(args[1] +"/appsettings.json"));
+            args[1] = args[1].Replace("\n", "\\n");
+            var configs = JsonConvert.DeserializeObject < Dictionary<string, string>>(File.ReadAllText(args[1].Replace("\n","\\n") +"/appsettings.json"));
 
             
 
@@ -44,8 +43,8 @@ public static class Program
             databasePath = args[1];
             var arg = args[0];
 
-            logger = new LogWriter(args[1] + "\\" + "logs.txt");
-            logger.LogInformation(DateTime.Now.ToLongTimeString());
+            LogWriter.Path = args[1] + "\\" + "logs.txt";
+            LogWriter.LogInformation(DateTime.Now.ToLongTimeString());
             if (arg.Contains("mainParce"))
             {
 
@@ -53,7 +52,7 @@ public static class Program
                 ClearProducts();
                 await ParceAndSaveStores();
                 Console.WriteLine("Start Parsing");
-                await MainParce();
+                await MainParse();
                 exportCsv(configs["outputPath"]);
                 return;
             };
@@ -78,14 +77,14 @@ public static class Program
                 ClearProducts();
 
                 await ParceAndSaveStores();
-                await MainParce();
+                await MainParse();
             }
             else if (arg.Contains("refreshProducts"))
             {
                 Console.WriteLine("Start Deleting");
                 ClearProducts();
                 Console.WriteLine("Start Parsing");
-                await MainParce();
+                await MainParse();
             }
             else if (arg.Contains("refreshStores"))
             {
@@ -93,7 +92,7 @@ public static class Program
             }
             else if (arg.Contains("parceProducts"))
             {
-                await MainParce();
+                await MainParse();
             }
             else if (arg.Contains("fastExport"))
             {
@@ -103,15 +102,15 @@ public static class Program
             {
                 exportCsv(configs["outputPath"], 20);
             }
-            logger.LogInformation(DateTime.Now.ToLongTimeString());
+            LogWriter.LogInformation(DateTime.Now.ToLongTimeString());
             Console.WriteLine("Completed!");
 
         }
         catch(Exception ex)
         {
             Console.WriteLine(ex.Message);
-            logger.LogCritical(ex.Message);
-            logger.LogCritical(ex.StackTrace);
+            LogWriter.LogCritical(ex.Message);
+            LogWriter.LogCritical(ex.StackTrace);
         }
     }
 
@@ -167,6 +166,7 @@ public static class Program
         using (var context = new ApplicationContext())
         {
             IEnumerable<Product> products;
+            
             if(count == -1)
             {
                 products = context.Products.Include(p => p.ProductInStores).ToList();
@@ -199,20 +199,20 @@ public static class Program
                     foreach (var productInStore in product.ProductInStores)
                 {
                     var stor = stores.Find(s => s.Id == productInStore.StoreId);
-                    var cords = String.Join(",", stor?.Сoordinates.Split(" ").Select(el => el.Replace(",", ".")) ?? new string[0]);
+                    var cords = String.Join(",", stor?.Сoordinates.Split(" ").Select(el => el.Replace(",", ".")) ?? new string[] {"0.0","0.0"});
                     var dataProduct = new ProductRecordCSV
                     {
                         StoreId = productInStore.StoreId.ToString(),
-                        Addres = stor?.Adress ?? "",
-                        City = stor?.City ?? "",
+                        Addres = stor?.Adress?.Replace(";","|") ?? "",
+                        City = stor?.City?.Replace(";", "|") ?? "",
                         ProductId = product.Id.ToString(),
-                        ProductName = product.ProductName,
-                        Producer = product.Producer,
+                        ProductName = product.ProductName.Replace(";", "|"),
+                        Producer = product?.Producer?.Replace(";", "|"),
                         CountLeft = "1",
-                        Price = productInStore.Price.ToString().Replace(",", "."),
-                        Coordinat = cords,
-                        StoreNet = stor?.Name,
-                        RequestDate = productInStore?.RequestDate.ToString("yyyy-MM-dd HH:mm:ss")??""
+                        Price = productInStore.Price.ToString().Replace(",", ".").Replace(";", "|"),
+                        Coordinat = cords.Replace(";", "|"),
+                        StoreNet = stor?.Name?.Replace(";", "|")??"",
+                        RequestDate = productInStore?.RequestDate.ToString("yyyy-MM-dd HH:mm:ss") ?? DateTime.UnixEpoch.ToString("yyyy-MM-dd HH:mm:ss")
                     };
                     dataProducts.Add(dataProduct);
                 }
@@ -326,7 +326,7 @@ public static class Program
     async static void ParceAndSaveAll()
     {
         await ParceAndSaveStores();
-        await MainParce();
+        await MainParse();
     }
     async static Task ParceAndSaveStores()
     {
@@ -351,6 +351,7 @@ public static class Program
 
                 var StoreNodes = chainHtmlDock.DocumentNode.SelectNodes("//li[@class='chain-sublist__item']");
                 string? chainSite = null;
+                if (StoreNodes == null) continue;
                 foreach (var storeNode in StoreNodes)
                 {
                     var singleStoreNode = HtmlNode.CreateNode(storeNode.OuterHtml);
@@ -394,51 +395,47 @@ public static class Program
     }
 
 
-    async static Task MainParce()
+    async static Task MainParse()
     {
         WebScraper webScraper = new WebScraper();
         string patternUrls = @"https://mypharmacy\.com\.ua/catalogue.*?(?="")";
         string patternCount = @"(?<=\ for\ \(var\ i\ =\ 1;\ i\ <=).*?(?=\ \*\ 28)";
         var str = await webScraper.GetHtml("https://mypharmacy.com.ua/catalogue/all/");
 
-        var ListUrls = Regex.Matches(str, patternUrls).Cast<Match>()
-                        .Select(m => m.Value).Distinct()
+        var ListUrls = Regex.Matches(str, patternUrls)
+                        .Select(m => m.Value)
+                        .Where(m=>m.Count(c => c == '/')<=7)
+                        .Where(m=>m!= "https://mypharmacy.com.ua/catalogue/all/")
+                        .Distinct()
                         .ToList();
-        string count = "";
+        string countString = "";
         foreach (var listUrl in ListUrls)
         {
-            if (listUrl == "https://mypharmacy.com.ua/catalogue/all/") continue;
-
-            int countSymbol = Extensions.CountByCharacter(listUrl, '/');
-            if (countSymbol > 5) continue;
             str = await webScraper.GetHtml(listUrl);
-            count = Regex.Match(str, patternCount).Value;
+            countString = Regex.Match(str, patternCount).Value.Trim();
 
-            bool flag = Extensions.IsDigit(count, count.Length - 1);
-            HtmlDocument htmlDoc = new HtmlDocument();
-            htmlDoc.LoadHtml(str);
-            HtmlAgilityPack.HtmlNodeCollection nodesProduct = htmlDoc.DocumentNode.SelectNodes("//a[@class='products-list__item-link-wrapper']");
+
+            bool flag = int.TryParse(countString, out var countNumber);
             if (flag)
             {
-                for (int i = 1; i < Convert.ToInt32(count);)
+                for (int i = 1; i <=countNumber;i++)
                 {
                     try
                     {
-                        var allLinksOnPage = nodesProduct.Select(node => node.Attributes["href"].Value.Replace("instruction/", "")).ToList();
-
-                        i++;
                         str = await webScraper.GetHtml(listUrl + $"page={i}/");
+                        HtmlDocument htmlDoc = new HtmlDocument();
                         htmlDoc.LoadHtml(str);
-                        nodesProduct = htmlDoc.DocumentNode.SelectNodes("//a[@class='products-list__item-link-wrapper']");
+                        var nodesProduct = htmlDoc.DocumentNode.SelectNodes("//a[@class='products-list__item-link-wrapper']");
+                        var allLinksOnPage = nodesProduct.Select(node => node.Attributes["href"].Value.Replace("instruction/", "")).Where(l=>l!=null).ToList();
 
                         var tasks = new List<Task<Tuple<Product, Dictionary<int, string>>>>();
                         using (var context = new ApplicationContext())
                         {
                             var idsInDb = context.Products.Select(p => p.Id).ToList();
 
+                            var productIdPattern = @".ua\/.+\/(\d+)\/";
                             allLinksOnPage = allLinksOnPage.Where(link =>
                             {
-                                var productIdPattern = @".ua\/.+\/(\d+)\/";
                                 var productId = Convert.ToInt32(Regex.Match(link, productIdPattern).Groups[1].Value);
                                 return !idsInDb.Contains(productId);
                             }).ToList();
@@ -471,7 +468,7 @@ public static class Program
 
                             if (logMessages != "")
                             {
-                                logger.LogInformation(logMessages);
+                                LogWriter.LogInformation(logMessages);
                                 logMessages = "";
                             }
 
@@ -507,8 +504,8 @@ public static class Program
                     }
                     catch (Exception ex)
                     {
-                        logger.LogCritical(ex.Message);
-                        logger.LogCritical(ex.StackTrace);
+                        LogWriter.LogCritical(ex.Message);
+                        LogWriter.LogCritical(ex.StackTrace);
                     }
 
                 }
@@ -529,14 +526,15 @@ public static class Program
         var organizationPointsPattern = @"organizationPoints = (\{.+\}),";
         var organizationIdListPattern = @"organizationIdList = (\[.+\]),";
 
+        var htmlDock = new HtmlDocument();
+        htmlDock.LoadHtml(html);
+        productName = htmlDock.DocumentNode.SelectSingleNode("//div[@class='search-result-head__title-wrapper']/h1").InnerText.Trim();
+
         var organizationPointsJson = Regex.Match(html, organizationPointsPattern).Groups[1].Value;
         var organizationIdListJson = Regex.Match(html, organizationIdListPattern).Groups[1].Value;
         if (organizationIdListJson == "" && organizationPointsJson == "")
         {
-            logMessages += $"There isn't product {productId} in stores\n";
-            var htmlDock = new HtmlDocument();
-            htmlDock.LoadHtml(html);
-            productName = htmlDock.DocumentNode.SelectSingleNode("//div[@class='search-result-head__title-wrapper']/h1").InnerText.Trim();
+            logMessages += $"There isn't product {productId} {productName} in stores\n";
 
             return new Tuple<Product, Dictionary<int, string>>(null, new Dictionary<int, string>());
         }
@@ -580,7 +578,7 @@ public static class Program
         var organizationHeadProductId = Regex.Match(html, organizationHeadProductIdPattern).Groups[1].Value;
 
 
-        //const int tasksCount =40;
+        //const int tasksCount = 40;
         //const int storesPerThread = 50;
 
         //var productsInStoresWhereAvailible = productInStores.Where(el => el.CountLeft == 1).ToList();
@@ -593,7 +591,7 @@ public static class Program
         //{
         //    var tasks = new List<Task>();
 
-        //    for (var i = 0; i < tasksCount&& productsInStoresWhereAvailible.Count>0; i++)
+        //    for (var i = 0; i < tasksCount && productsInStoresWhereAvailible.Count > 0; i++)
         //    {
         //        var storesInDbPerThread = productsInStoresWhereAvailible.Take(storesPerThread).ToList();
         //        productsInStoresWhereAvailible = productsInStoresWhereAvailible.Skip(storesPerThread).ToList();
